@@ -67,8 +67,9 @@ function onPointerMove(e) {
   const x = e.clientX ?? (e.touches?.[0]?.clientX || 0)
   const dx = x - dragStartX.value
   if (Math.abs(dx) > 3) didDrag.value = true
-  offset1.value = startOffset1.value + dx
-  offset2.value = startOffset2.value + dx
+  // 反向应用 dx，使得向右拖动时内容也向右移动
+  offset1.value = startOffset1.value - dx
+  offset2.value = startOffset2.value - dx
   e.preventDefault()
 }
 
