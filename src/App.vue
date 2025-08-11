@@ -78,7 +78,7 @@ onUnmounted(() => {
 
 .hero__title {
   color: silver;
-  font-size: 8rem;
+  font-size: 8vw;
   line-height: 1.1;
   letter-spacing: 0.08em;
   text-shadow: 0 6px 18px rgba(0,0,0,0.5);
@@ -95,7 +95,7 @@ onUnmounted(() => {
 .hero__subtitle {
   margin-top: 1.35rem;
   color: rgba(255,255,255,0.92);
-  font-size: 4rem;
+  font-size: 4vw;
   line-height: 1.2;
   letter-spacing: 0.06em;
   text-shadow: 0 4px 14px rgba(0,0,0,0.45);
