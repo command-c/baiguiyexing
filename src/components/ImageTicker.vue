@@ -3,41 +3,34 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 
 // 读取项目根目录下的 gallery 中的所有常见图片类型
 // 从 src/components 到项目根是 ../../
-const modules = import.meta.glob('../../gallery/*.{png,jpg,jpeg,gif,webp,avif}', {
+const modules = import.meta.glob('../../gallery/*.{png,jpg,jpeg,gif,webp,avif,PNG,JPG,JPEG,GIF}', {
   eager: true,
   import: 'default',
 })
 
 const images = Object.values(modules)
 
-// 拆成两排，并各自做无缝拼接
-const row1 = computed(() => images.filter((_, i) => i % 2 === 0))
-const row2 = computed(() => images.filter((_, i) => i % 2 === 1))
-const doubled1 = computed(() => row1.value.concat(row1.value))
-const doubled2 = computed(() => row2.value.concat(row2.value))
+// 改为 5 排
+const ROWS = 5
+const rows = computed(() => Array.from({ length: ROWS }, (_, r) => images.filter((_, i) => i % ROWS === r)))
+const doubledRows = computed(() => rows.value.map(list => list.concat(list)))
+
 // 使用 rAF 控制偏移，便于拖拽
-const offset1 = ref(0)
-const offset2 = ref(0)
-const speed1 = ref(30) // px/s 左移
-const speed2 = ref(22)
-const track1 = ref(null)
-const track2 = ref(null)
-const rowWidth1 = ref(1)
-const rowWidth2 = ref(1)
+const offsets = ref(Array(ROWS).fill(0)) // 每行偏移
+// 每行速度（px/s），奇数行向右（负值），偶数行向左（正值）
+const speeds = computed(() => [30, 26, 24, 28, 22].map((s, i) => (i % 2 === 1 ? -s : s)))
+const tracks = ref(Array(ROWS).fill(null)) // 轨道元素引用
+const rowWidths = ref(Array(ROWS).fill(1)) // 单轮宽度（每个 track 宽度的一半）
 
 function measure() {
-  const t1 = track1.value
-  const t2 = track2.value
-  rowWidth1.value = Math.max(1, Math.round((t1?.offsetWidth || 0) / 2))
-  rowWidth2.value = Math.max(1, Math.round((t2?.offsetWidth || 0) / 2))
+  rowWidths.value = tracks.value.map(t => Math.max(1, Math.round((t?.offsetWidth || 0) / 2)))
 }
 
 let raf = 0
 let lastTs = 0
 const dragging = ref(false)
 const dragStartX = ref(0)
-const startOffset1 = ref(0)
-const startOffset2 = ref(0)
+const startOffsets = ref(Array(ROWS).fill(0))
 const didDrag = ref(false)
 
 function step(ts) {
@@ -45,8 +38,7 @@ function step(ts) {
   const dt = (ts - lastTs) / 1000
   lastTs = ts
   if (!dragging.value) {
-    offset1.value -= speed1.value * dt
-    offset2.value -= speed2.value * dt
+    offsets.value = offsets.value.map((val, i) => val - ((speeds.value?.[i] || 0) * dt))
   }
   raf = requestAnimationFrame(step)
 }
@@ -55,8 +47,7 @@ function onPointerDown(e) {
   dragging.value = true
   didDrag.value = false
   dragStartX.value = e.clientX ?? (e.touches?.[0]?.clientX || 0)
-  startOffset1.value = offset1.value
-  startOffset2.value = offset2.value
+  startOffsets.value = [...offsets.value]
   window.addEventListener('pointermove', onPointerMove, { passive: false })
   window.addEventListener('pointerup', onPointerUp, { passive: true })
   window.addEventListener('touchmove', onPointerMove, { passive: false })
@@ -68,8 +59,7 @@ function onPointerMove(e) {
   const dx = x - dragStartX.value
   if (Math.abs(dx) > 3) didDrag.value = true
   // 反向应用 dx，使得向右拖动时内容也向右移动
-  offset1.value = startOffset1.value - dx
-  offset2.value = startOffset2.value - dx
+  offsets.value = startOffsets.value.map(v => v - dx)
   e.preventDefault()
 }
 
@@ -127,19 +117,13 @@ function closeLightbox() {
     @pointerdown="onPointerDown"
     @touchstart.passive="onPointerDown"
   >
-    <!-- 第一排 -->
-    <div class="ticker__mask">
-      <div ref="track1" class="ticker__track" :style="translateStyle(offset1, rowWidth1)">
-        <figure v-for="(src, idx) in doubled1" :key="`r1-` + idx" class="ticker__item">
-          <img :src="src" alt="gallery image" loading="lazy" @click="!didDrag ? openLightbox(src) : null" />
-        </figure>
-      </div>
-    </div>
-
-    <!-- 第二排 -->
-    <div class="ticker__mask">
-      <div ref="track2" class="ticker__track" :style="translateStyle(offset2, rowWidth2)">
-        <figure v-for="(src, idx) in doubled2" :key="`r2-` + idx" class="ticker__item">
+    <div class="ticker__mask" v-for="(list, r) in doubledRows" :key="'row-'+r">
+      <div
+        class="ticker__track"
+        :ref="el => (tracks[r] = el)"
+        :style="translateStyle(offsets[r], rowWidths[r])"
+      >
+        <figure v-for="(src, idx) in list" :key="'row-' + r + '-' + idx" class="ticker__item">
           <img :src="src" alt="gallery image" loading="lazy" @click="!didDrag ? openLightbox(src) : null" />
         </figure>
       </div>
@@ -157,9 +141,9 @@ function closeLightbox() {
 .ticker {
   width: 100%;
   overflow: hidden;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0.25rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
   cursor: grab;
   user-select: none;
 }
@@ -182,7 +166,7 @@ function closeLightbox() {
 }
 
 .ticker__item img {
-  height: 140px;
+  height: 110px;
   width: auto;
   display: block;
   border-radius: 12px;
@@ -194,7 +178,7 @@ function closeLightbox() {
 /* JS 驱动滚动，不再使用 CSS 关键帧 */
 
 @media (min-width: 768px) {
-  .ticker__item img { height: 180px; }
+  .ticker__item img { height: 140px; }
 }
 
 /* 灯箱样式 */
